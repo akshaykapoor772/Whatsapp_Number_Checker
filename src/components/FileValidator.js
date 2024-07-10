@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import DataTable from './DataTable'; 
 
 const FileValidator = ({ files }) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
     const [uploaded, setUploaded] = useState(false); // Track if the files have been uploaded
+    const [message, setMessage] = useState(''); // To store the success message
     const isMounted = useRef(false);
     const [progress, setProgress] = useState(0); // To track upload progress
+    const [showData, setShowData] = useState(false); // To control when to show the data
 
     useEffect(() => {
         if (!isMounted.current) {
@@ -18,7 +21,7 @@ const FileValidator = ({ files }) => {
                 uploadFiles(files);
             }
         }
-    }, [files]);
+    }, [files, uploaded, loading]);
 
     const uploadFiles = (files) => {
         setLoading(true);
@@ -39,10 +42,14 @@ const FileValidator = ({ files }) => {
             if (xhr.status === 200) {
                 const result = JSON.parse(xhr.responseText);
                 console.log("Received data from backend:", result);
-                if (result.data) {
-                    setData(result.data);
-                }
-                setUploaded(true); // Mark the files as uploaded
+                setMessage(result.message);
+                setTimeout(() => {
+                    if (result.data) {
+                        setData(result.data);
+                        setShowData(true);
+                    }
+                    setUploaded(true); // Mark the files as uploaded
+                }, 1000); // Delay the display of data for 2 seconds
             } else {
                 console.error('Error during the upload:', xhr.statusText);
             }
@@ -58,25 +65,17 @@ const FileValidator = ({ files }) => {
     };
 
     if (loading) {
-    return (
-        <div>
-            <p>Uploading... {progress}%</p>
-            <progress value={progress} max="100"></progress>
-        </div>
-    );
-}
+        return (
+            <div>
+                <p>Uploading... {progress}%</p>
+                <progress value={progress} max="100"></progress>
+            </div>
+        );
+    }
 
     return (
         <div>
-            {data.length > 0 ? data.map((row, index) => (
-                <div key={index}>
-                    <p>Name: {row.name}</p>
-                    <p>Email: {row.email}</p>
-                    <p>Number: {row.mobile_number}</p>
-                    <p>Status: {row.is_valid ? "Valid" : "Invalid"}</p>
-                    <hr />
-                </div>
-            )) : <p>No data to display</p>}
+        {showData ? <DataTable data={data} /> : <p>{message}</p>}
         </div>
     );
 };

@@ -27,6 +27,11 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
 
+// Mock function to check if a phone number is a valid WhatsApp number
+const isValidWhatsAppNumber = (phoneNumber) => {
+    // Example mock check: valid if exactly 10 digits
+    return phoneNumber.length === 10;
+};
 
 app.post('/upload', upload.array('files'), (req, res) => {
     if (!req.files || req.files.length === 0) {
@@ -56,12 +61,10 @@ app.post('/upload', upload.array('files'), (req, res) => {
                 const users = results.data.map(contact => {
                     // Strip out non-numeric characters from the phone number
                     const cleanPhoneNumber = contact['Mobile Number'] ? contact['Mobile Number'].replace(/\D/g, '') : '';
-                    console.log("CleanPhone:", cleanPhoneNumber);
-
                     if (!cleanPhoneNumber || !contact.Name || !contact['Email Address']) {
-                        console.log("INSIDE SKIPPING");
-                        console.log(`Value of CleanPhoneNum: ${cleanPhoneNumber}, Name: ${contact.Name}, Email: ${contact['Email Address']}`);
-                        console.log("skipping");
+                        //console.log("INSIDE SKIPPING");
+                        //console.log(`Value of CleanPhoneNum: ${cleanPhoneNumber}, Name: ${contact.Name}, Email: ${contact['Email Address']}`);
+                        //console.log("skipping");
                         return null; // Skip invalid entries
                     }
 
@@ -69,13 +72,13 @@ app.post('/upload', upload.array('files'), (req, res) => {
                         mobile_number: cleanPhoneNumber,
                         name: contact.Name,
                         email: contact['Email Address'],
-                        is_valid: cleanPhoneNumber.length === 10,  // Updated validation logic
+                        is_valid: isValidWhatsAppNumber(cleanPhoneNumber),  // Use the mock function to check validity
                         checked_at: new Date()
                     };
                 }).filter(user => user !== null); // Filter out invalid entries
                 
                 allResults = allResults.concat(users);
-                console.log("Server allResults:", allResults);
+                //console.log("Server allResults:", allResults);
                 
                 // Save users to MongoDB
                 User.insertMany(users)
