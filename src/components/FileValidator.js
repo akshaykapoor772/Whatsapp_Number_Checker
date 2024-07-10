@@ -5,6 +5,7 @@ const FileValidator = ({ files }) => {
     const [loading, setLoading] = useState(false);
     const [uploaded, setUploaded] = useState(false); // Track if the files have been uploaded
     const isMounted = useRef(false);
+    const [progress, setProgress] = useState(0); // To track upload progress
 
     useEffect(() => {
         if (!isMounted.current) {
@@ -24,33 +25,46 @@ const FileValidator = ({ files }) => {
         const formData = new FormData();
         files.forEach(file => formData.append('files', file));
 
-        fetch('http://localhost:5500/upload', {
-            method: 'POST',
-            body: formData,
-        })
-        .then(response => {
-            if (!response.ok) {
-                return response.text().then(text => { throw new Error(text) });
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'http://localhost:5500/upload', true);
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                setProgress(percentComplete); // Update progress state
             }
-            return response.json();
-        })
-        .then(result => {
-            console.log("Received data from backend:", result);
-            if (result.data) {
-                setData(result.data);
+        };
+
+        xhr.onload = () => {
+            if (xhr.status === 200) {
+                const result = JSON.parse(xhr.responseText);
+                console.log("Received data from backend:", result);
+                if (result.data) {
+                    setData(result.data);
+                }
+                setUploaded(true); // Mark the files as uploaded
+            } else {
+                console.error('Error during the upload:', xhr.statusText);
             }
             setLoading(false);
-            setUploaded(true); // Mark the files as uploaded
-        })
-        .catch(error => {
-            console.error('Error:', error);
+        };
+
+        xhr.onerror = () => {
+            console.error('Error during the upload');
             setLoading(false);
-        });
+        };
+
+        xhr.send(formData);
     };
 
     if (loading) {
-        return <p>Loading...</p>;
-    }
+    return (
+        <div>
+            <p>Uploading... {progress}%</p>
+            <progress value={progress} max="100"></progress>
+        </div>
+    );
+}
 
     return (
         <div>
