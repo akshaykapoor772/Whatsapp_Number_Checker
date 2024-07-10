@@ -8,9 +8,103 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 const Papa = require('papaparse');
 const User = require('./models/User');  // Import your Mongoose model
+const authRoutes = require('./routes/authRoutes');
+const { protect } = require('./middleware/authMiddleware');
+const http = require('http');
+const socketIo = require('socket.io');
+const { Client } = require('whatsapp-web.js');
+const qrcode = require('qrcode');
 
 const app = express();
 const PORT = process.env.PORT || 5500;
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+    cors: {
+        origin: "http://localhost:3000",  // Adjust this to match your front-end URL in production
+        methods: ["GET", "POST"]
+    }
+});
+
+
+// Setup WhatsApp client and QR code event
+console.log('Initializing WhatsApp client...');
+const whatsappClient = new Client({
+    webVersionCache: {type: 'none'},
+    puppeteer: {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        timeout: 1000000
+    }
+  });
+
+whatsappClient.on('qr', (qr) => {
+    console.log('QR RECEIVED', qr);
+    qrcode.toDataURL(qr, (err, url) => {
+        if (err) {
+            console.error('Error generating QR code:', err);
+            return;
+        }
+        io.emit('qr', { src: url });
+        console.log('QR Code sent to the client');
+    });
+});
+
+whatsappClient.on('ready', () => {
+    console.log('WhatsApp client is ready and authenticated!');
+    io.emit('authenticated', { message: "You are now logged in to WhatsApp and ready to use services" });
+});
+
+/*
+whatsappClient.initialize()
+.then(() => console.log('WhatsApp client initialized successfully'))
+.catch(e => {
+    console.error('Failed to initialize WhatsApp client:', e);
+    console.log(e.stack);
+})
+*/
+
+let isInitialized = false;
+
+if (!isInitialized) {
+    whatsappClient.initialize()
+    .then(() => console.log('WhatsApp client initialized successfully'))
+    .catch(e => {
+        console.error('Failed to initialize WhatsApp client:', e);
+        console.log(e.stack);
+    })
+    isInitialized = true;
+}
+
+whatsappClient.on('authenticated', (session) => {
+    console.log('Authentication successful!', session);
+});
+
+whatsappClient.on('auth_failure', msg => {
+    console.error('Authentication failure:', msg);
+});
+
+whatsappClient.on('disconnected', (reason) => {
+    console.log('WhatsApp client disconnected!', reason);
+    io.emit('qr-request', { message: "Please scan QR code again to reconnect." });
+    isInitialized = false;  // Reset initialization flag
+    // Consider delaying reinitialization to prevent rapid loops
+    //setTimeout(() => whatsappClient.initialize(), 10000);
+});
+
+whatsappClient.on('error', (error) => {
+    console.error('Error in WhatsApp client:', error);
+});
+
+io.on('connection', socket => {
+    console.log('Client connected to the socket');
+    // Additional socket events can be handled here
+});
+
+// Additional routes and logic
+app.get('/some-route', (req, res) => {
+    res.send('Response from some route');
+});
 
 const corsOptions = {
     origin: 'http://localhost:3000', // Allow only your frontend URL, change if different
@@ -26,6 +120,12 @@ app.use(express.json());
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
+
+app.use('/auth', authRoutes);
+
+app.get('/auth/login', protect, (req, res) => {
+    res.status(200).json({ message: 'You are authenticated', user: req.user });
+  });
 
 // Mock function to check if a phone number is a valid WhatsApp number
 const isValidWhatsAppNumber = (phoneNumber) => {
@@ -62,9 +162,6 @@ app.post('/upload', upload.array('files'), (req, res) => {
                     // Strip out non-numeric characters from the phone number
                     const cleanPhoneNumber = contact['Mobile Number'] ? contact['Mobile Number'].replace(/\D/g, '') : '';
                     if (!cleanPhoneNumber || !contact.Name || !contact['Email Address']) {
-                        //console.log("INSIDE SKIPPING");
-                        //console.log(`Value of CleanPhoneNum: ${cleanPhoneNumber}, Name: ${contact.Name}, Email: ${contact['Email Address']}`);
-                        //console.log("skipping");
                         return null; // Skip invalid entries
                     }
 
@@ -101,6 +198,8 @@ app.post('/upload', upload.array('files'), (req, res) => {
     });
 });
 
-app.listen(PORT, () => {
+
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
