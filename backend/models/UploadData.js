@@ -1,8 +1,7 @@
-// models/User.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-const userSchema = new Schema({
+const uploadDataSchema = new Schema({
     name: String,
     email: { type: String, unique: false },  // Ensure emails are unique across the collection
     mobile_number: String,
@@ -10,4 +9,4 @@ const userSchema = new Schema({
     checked_at: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model('UploadData', uploadDataSchema);
