@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Container, TextField, Button, Typography, Paper, Box } from '@mui/material';
+import PersonIcon from '@mui/icons-material/Person';
 
 function UserLogin({ setToken }) {
     const [email, setEmail] = useState('');
@@ -24,18 +26,51 @@ function UserLogin({ setToken }) {
     };
 
     return (
-        <form onSubmit={handleSubmit}>
-            <h2>User Login</h2>
-            <div>
-                <label>Email</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div>
-                <label>Password</label>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <button type="submit">Log In</button>
-        </form>
+        <Container component="main" maxWidth="xs">
+            <Paper elevation={6} sx={{ mt: 8, p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Typography component="h1" variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PersonIcon />
+                    User Login
+                </Typography>
+                <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
+                    <TextField
+                        variant="outlined"
+                        margin="normal"
+                        required
+                        fullWidth
+                        id="email"
+                        label="Email"
+                        name="email"
+                        autoComplete="email"
+                        autoFocus
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                    />
+                    <TextField
+                        variant="outlined"
+                        margin="normal"
+                        required
+                        fullWidth
+                        name="password"
+                        label="Password"
+                        type="password"
+                        id="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <Button
+                        type="submit"
+                        fullWidth
+                        variant="contained"
+                        color="primary"
+                        sx={{ mt: 3, mb: 2 }}
+                    >
+                        Log In
+                    </Button>
+                </Box>
+            </Paper>
+        </Container>
     );
 }
 

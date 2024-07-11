@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import DataTable from './DataTable'; 
 
-const FileValidator = ({ files }) => {
+const FileValidator = ({ files, startProcessing }) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
     const [uploaded, setUploaded] = useState(false); // Track if the files have been uploaded
@@ -21,7 +21,7 @@ const FileValidator = ({ files }) => {
                 uploadFiles(files);
             }
         }
-    }, [ ]);
+    }, [startProcessing]);
 
     const uploadFiles = (files) => {
         setLoading(true);

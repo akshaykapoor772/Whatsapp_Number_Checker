@@ -52,6 +52,7 @@ function App() {
                             <ListItemText primary="Admin" />
                         </ListItem>
                         {/* Logout Buttons */}
+                        {/*
                         {userToken && (
                             <ListItem button key="UserLogout" onClick={handleUserLogout}>
                                 <ListItemIcon><MailIcon /></ListItemIcon>
@@ -64,14 +65,15 @@ function App() {
                                 <ListItemText primary="Admin Logout" />
                             </ListItem>
                         )}
+                          */}
                     </List>
                 </Drawer>
                 <div style={{ paddingLeft: 250, paddingRight: 50 }}>
                     <Routes>
-                        <Route path="/" element={userToken ? <UsersPage /> : <Navigate replace to="/user/login" />} />
+                        <Route path="/" element={userToken ? <UsersPage handleUserLogout={handleUserLogout}/> : <Navigate replace to="/user/login" />} />
                         <Route path="/user/login" element={userToken ? <Navigate replace to="/" /> : <UserLogin setToken={setUserToken} />} />
                         <Route path="/admin/login" element={adminToken ? <Navigate replace to="/admin" /> : <Login setToken={setAdminToken} />} />
-                        <Route path="/admin" element={adminToken ? <AdminPage /> : <Navigate replace to="/admin/login" />} />
+                        <Route path="/admin" element={adminToken ? <AdminPage handleAdminLogout={handleAdminLogout}/> : <Navigate replace to="/admin/login" />} />
                     </Routes>
                 </div>
             </BrowserRouter>
