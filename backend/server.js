@@ -1,5 +1,4 @@
-require('dotenv').config();  // This line should be at the very top of your file
-
+require('dotenv').config(); 
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
@@ -7,17 +6,16 @@ const cors = require('cors');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 const Papa = require('papaparse');
-const User = require('./models/User');  // Import your Mongoose model
+const UploadData = require('./models/UploadData'); 
 const authRoutes = require('./routes/authRoutes');
 const { protect } = require('./middleware/authMiddleware');
 const http = require('http');
 const socketIo = require('socket.io');
 const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-
+const UploadEvent = require('./models/UploadEvent');
 const app = express();
 const PORT = process.env.PORT || 5500;
-
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
@@ -25,7 +23,6 @@ const io = socketIo(server, {
         methods: ["GET", "POST"]
     }
 });
-
 
 // Setup WhatsApp client and QR code event
 console.log('Initializing WhatsApp client...');
@@ -37,6 +34,17 @@ const whatsappClient = new Client({
         timeout: 1000000
     }
   });
+
+let isInitialized = false;
+if (!isInitialized) {
+    whatsappClient.initialize()
+    .then(() => console.log('WhatsApp client initialized successfully'))
+    .catch(e => {
+        console.error('Failed to initialize WhatsApp client:', e);
+        console.log(e.stack);
+    })
+    isInitialized = true;
+}
 
 whatsappClient.on('qr', (qr) => {
     console.log('QR RECEIVED', qr);
@@ -55,29 +63,13 @@ whatsappClient.on('ready', () => {
     io.emit('authenticated', { message: "You are now logged in to WhatsApp and ready to use services" });
 });
 
-/*
-whatsappClient.initialize()
-.then(() => console.log('WhatsApp client initialized successfully'))
-.catch(e => {
-    console.error('Failed to initialize WhatsApp client:', e);
-    console.log(e.stack);
-})
-*/
-
-let isInitialized = false;
-
-if (!isInitialized) {
-    whatsappClient.initialize()
-    .then(() => console.log('WhatsApp client initialized successfully'))
-    .catch(e => {
-        console.error('Failed to initialize WhatsApp client:', e);
-        console.log(e.stack);
-    })
-    isInitialized = true;
-}
-
 whatsappClient.on('authenticated', (session) => {
     console.log('Authentication successful!', session);
+    const SystemEvent = require('./models/SystemEvent');
+    SystemEvent.create({
+        event_type: 'auth_success',
+        description: 'WhatsApp authentication successful.'
+    });
 });
 
 whatsappClient.on('auth_failure', msg => {
@@ -88,8 +80,6 @@ whatsappClient.on('disconnected', (reason) => {
     console.log('WhatsApp client disconnected!', reason);
     io.emit('qr-request', { message: "Please scan QR code again to reconnect." });
     isInitialized = false;  // Reset initialization flag
-    // Consider delaying reinitialization to prevent rapid loops
-    //setTimeout(() => whatsappClient.initialize(), 10000);
 });
 
 whatsappClient.on('error', (error) => {
@@ -133,28 +123,37 @@ const isValidWhatsAppNumber = (phoneNumber) => {
     return phoneNumber.length === 10;
 };
 
-app.post('/upload', upload.array('files'), (req, res) => {
+app.post('/upload', protect, upload.array('files'), (req, res) => {
     if (!req.files || req.files.length === 0) {
         return res.status(400).json({ error: 'No files uploaded.' });
     }
-
     let allResults = [];
     let filesProcessed = 0;
 
     const handleChunkComplete = () => {
         filesProcessed += 1;
         if (filesProcessed === req.files.length) {
+            const fileNames = req.files.map(file => file.originalname);  // Gather all file names
+            const fileSizes = req.files.map(file => file.size);        
+            UploadEvent.create({
+                user_id: req.user._id,
+                user_name: req.user.Name,
+                file_names: fileNames,
+                file_sizes: fileSizes,
+                valid_numbers: allResults.filter(user => user.is_valid).length,
+                invalid_numbers: allResults.filter(user => !user.is_valid).length,
+                total_numbers: allResults.length
+            });
             // All files processed
             res.json({ message: "Data processed and stored successfully!", data: allResults });
         }
     };
-
     req.files.forEach(file => {
         // Parse CSV data in chunks
         Papa.parse(file.buffer.toString(), {
             header: true,
             skipEmptyLines: true,  // Skip empty lines
-            chunkSize: 1000,  // Increase chunk size to avoid unnecessary chunk processing
+            //chunkSize: 1000,  // Increase chunk size to avoid unnecessary chunk processing
             transformHeader: header => header.trim(), // Normalize headers
             chunk: function(results, parser) {
                 console.log(`Processing chunk with ${results.data.length} entries`);
@@ -164,7 +163,6 @@ app.post('/upload', upload.array('files'), (req, res) => {
                     if (!cleanPhoneNumber || !contact.Name || !contact['Email Address']) {
                         return null; // Skip invalid entries
                     }
-
                     return {
                         mobile_number: cleanPhoneNumber,
                         name: contact.Name,
@@ -175,10 +173,13 @@ app.post('/upload', upload.array('files'), (req, res) => {
                 }).filter(user => user !== null); // Filter out invalid entries
                 
                 allResults = allResults.concat(users);
+                
                 //console.log("Server allResults:", allResults);
                 
+                
+                
                 // Save users to MongoDB
-                User.insertMany(users)
+                UploadData.insertMany(users)
                     .then(savedUsers => {
                         console.log("Chunk processed and saved successfully.");
                     })

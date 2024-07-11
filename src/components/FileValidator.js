@@ -21,7 +21,7 @@ const FileValidator = ({ files }) => {
                 uploadFiles(files);
             }
         }
-    }, [files, uploaded, loading]);
+    }, [ ]);
 
     const uploadFiles = (files) => {
         setLoading(true);
@@ -30,6 +30,7 @@ const FileValidator = ({ files }) => {
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', 'http://localhost:5500/upload', true);
+        xhr.setRequestHeader("Authorization", `Bearer ${localStorage.getItem('userToken')}`);
 
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
