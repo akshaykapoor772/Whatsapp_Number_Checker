@@ -1,11 +1,20 @@
 import React from 'react';
 import FileUploadForm from '../components/FileUploadForm';
+import { Button } from '@mui/material';
 
-function UsersPage() {
+function UsersPage({handleUserLogout}) {
   return (
-    <div>
-      <FileUploadForm />
-    </div>
+    <div style={{ position: 'relative' }}>
+    {/* Logout Button at the top right */}
+    <Button 
+      variant="contained" 
+      color="secondary" 
+      onClick={handleUserLogout} 
+      style={{ backgroundColor: '#ff1744', color: 'white', position: 'absolute', top: 10, right: 10 }}>
+      Logout
+    </Button>
+    <FileUploadForm />
+  </div>
   );
 }
 
