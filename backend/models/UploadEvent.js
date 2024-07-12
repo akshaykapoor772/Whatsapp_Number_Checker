@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const uploadEventSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    user_email: { type: String, required: true },
     file_names: [String],
     file_sizes: [Number],
     valid_numbers: Number,

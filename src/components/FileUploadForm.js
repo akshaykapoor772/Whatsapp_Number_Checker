@@ -42,7 +42,7 @@ function FileUploadForm() {
       <div style={{ padding: '20px' }}>
         <h1>WhatsApp Number Checker</h1>
         <input
-          accept=".csv"
+          accept=".csv, .xls, .xlsx"
           style={{ display: 'none' }}
           id="raised-button-file"
           multiple
