@@ -6,6 +6,7 @@ const cors = require('cors');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 const Papa = require('papaparse');
+const xlsx = require('xlsx');
 const UploadData = require('./models/UploadData'); 
 const authRoutes = require('./routes/authRoutes');
 const { protect } = require('./middleware/authMiddleware');
@@ -133,73 +134,132 @@ app.post('/upload', protect, upload.array('files'), (req, res) => {
     const handleChunkComplete = () => {
         filesProcessed += 1;
         if (filesProcessed === req.files.length) {
-            const fileNames = req.files.map(file => file.originalname);  // Gather all file names
-            const fileSizes = req.files.map(file => file.size);        
+            const fileNames = req.files.map(file => file.originalname);
+            const fileSizes = req.files.map(file => file.size);
             UploadEvent.create({
                 user_id: req.user._id,
-                user_name: req.user.Name,
+                user_email: req.user.email,
                 file_names: fileNames,
                 file_sizes: fileSizes,
                 valid_numbers: allResults.filter(user => user.is_valid).length,
                 invalid_numbers: allResults.filter(user => !user.is_valid).length,
                 total_numbers: allResults.length
+            }).then(() => {
+                res.json({ message: "Data processed and stored successfully!", data: allResults });
+            }).catch(err => {
+                console.error("Error saving event data:", err);
+                res.status(500).json({ error: 'Error saving event data to the database.' });
             });
-            // All files processed
-            res.json({ message: "Data processed and stored successfully!", data: allResults });
         }
     };
+
     req.files.forEach(file => {
-        // Parse CSV data in chunks
-        Papa.parse(file.buffer.toString(), {
-            header: true,
-            skipEmptyLines: true,  // Skip empty lines
-            //chunkSize: 1000,  // Increase chunk size to avoid unnecessary chunk processing
-            transformHeader: header => header.trim(), // Normalize headers
-            chunk: function(results, parser) {
-                console.log(`Processing chunk with ${results.data.length} entries`);
-                const users = results.data.map(contact => {
-                    // Strip out non-numeric characters from the phone number
-                    const cleanPhoneNumber = contact['Mobile Number'] ? contact['Mobile Number'].replace(/\D/g, '') : '';
-                    if (!cleanPhoneNumber || !contact.Name || !contact['Email Address']) {
-                        return null; // Skip invalid entries
+        const fileType = file.originalname.split('.').pop().toLowerCase();
+        try {
+            if (fileType === 'csv') {
+                Papa.parse(file.buffer.toString(), {
+                    header: true,
+                    skipEmptyLines: true,
+                    transformHeader: header => header.trim(),
+                    chunk: function(results) {
+                        processChunk(results.data);
+                    },
+                    complete: handleChunkComplete,
+                    error: function(err) {
+                        console.error("Error parsing CSV:", err);
+                        res.status(500).json({ error: 'Error parsing CSV data.' });
                     }
-                    return {
-                        mobile_number: cleanPhoneNumber,
-                        name: contact.Name,
-                        email: contact['Email Address'],
-                        is_valid: isValidWhatsAppNumber(cleanPhoneNumber),  // Use the mock function to check validity
-                        checked_at: new Date()
-                    };
-                }).filter(user => user !== null); // Filter out invalid entries
-                
-                allResults = allResults.concat(users);
-                
-                //console.log("Server allResults:", allResults);
-                
-                
-                
-                // Save users to MongoDB
-                UploadData.insertMany(users)
-                    .then(savedUsers => {
-                        console.log("Chunk processed and saved successfully.");
-                    })
-                    .catch(err => {
-                        console.error("Error saving data:", err);
-                        res.status(500).json({ error: 'Error saving data to the database.' });
-                    });
-            },
-            complete: function() {
+                });
+            } else if (fileType === 'xlsx') {
+                const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+                const sheetName = workbook.SheetNames[0];
+                const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+                processChunk(data);
                 handleChunkComplete();
-            },
-            error: function(err) {
-                console.error("Error parsing CSV:", err);
-                res.status(500).json({ error: 'Error parsing CSV data.' });
+            } else {
+                throw new Error('Unsupported file type');
             }
-        });
+        } catch (err) {
+            console.error('Error processing file:', err);
+            res.status(500).json({ error: 'Error processing file. ' + err.message });
+        }
     });
+
+    function processChunk(data) {
+        const users = data.map(contact => {
+            const cleanPhoneNumber = contact['Mobile Number'] ? String(contact['Mobile Number']).replace(/\D/g, '') : '';
+            if (!cleanPhoneNumber || !contact.Name || !contact['Email Address']) {
+                return null;
+            }
+            return {
+                mobile_number: cleanPhoneNumber,
+                name: contact.Name,
+                email: contact['Email Address'],
+                is_valid: isValidWhatsAppNumber(cleanPhoneNumber),
+                checked_at: new Date()
+            };
+        }).filter(user => user !== null);
+
+        allResults = allResults.concat(users);
+        UploadData.insertMany(users)
+            .then(() => console.log("Chunk processed and saved successfully."))
+            .catch(err => {
+                console.error("Error saving user data:", err);
+                res.status(500).json({ error: 'Error saving user data to the database.' });
+            });
+    }
 });
 
+app.get('/api/admin/upload-stats', protect, async (req, res) => {
+    console.log("Fetching upload stats");
+    try {
+        const uploadStats = await UploadEvent.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalFiles: { $sum: { $size: "$file_names" } },
+                    totalNumbers: { $sum: "$total_numbers" },
+                    totalValidNumbers: { $sum: "$valid_numbers" },
+                    totalInvalidNumbers: { $sum: "$invalid_numbers" }
+                }
+            }
+        ]);
+        res.json(uploadStats);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
 
+// Route to get uploads over time
+app.get('/api/admin/uploads-over-time', protect, async (req, res) => {
+    console.log("Fetching upload over time");
+    try {
+        const uploadsOverTime = await UploadEvent.aggregate([
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
+                    filesUploaded: { $sum: 1 },
+                    validNumbers: { $sum: "$valid_numbers" },
+                    invalidNumbers: { $sum: "$invalid_numbers" }
+                }
+            },
+            { $sort: { "_id": 1 } }
+        ]);
+        res.json(uploadsOverTime);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+app.get('/api/admin/upload-events', protect, async (req, res) => {
+    console.log("Fetching upload events");
+    try {
+      const uploadEvents = await UploadEvent.find();
+      res.json(uploadEvents);
+    } catch (error) {
+      res.status(500).send(error);
+    }
+  });
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

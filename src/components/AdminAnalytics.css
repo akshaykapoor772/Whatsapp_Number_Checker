@@ -1,0 +1,51 @@
+.admin-analytics {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  
+  .event-selection {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  
+  .card {
+    margin: 20px 0;
+  }
+  
+  .full-width-card {
+    width: 100%;
+  }
+  
+  .stats-charts {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+  }
+  
+  .one-third-card {
+    width: 32%;
+  }
+  
+  .two-thirds-card {
+    width: 65%;
+  }
+  
+  @media (max-width: 960px) {
+    .stats-charts {
+      flex-direction: column;
+    }
+  
+    .one-third-card,
+    .two-thirds-card {
+      width: 100%;
+    }
+  }
