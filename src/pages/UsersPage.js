@@ -5,7 +5,6 @@ import { Button } from '@mui/material';
 function UsersPage({handleUserLogout}) {
   return (
     <div style={{ position: 'relative' }}>
-    {/* Logout Button at the top right */}
     <Button 
       variant="contained" 
       color="secondary" 

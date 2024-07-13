@@ -98,7 +98,7 @@ app.get('/some-route', (req, res) => {
 });
 
 const corsOptions = {
-    origin: 'http://localhost:3000', // Allow only your frontend URL, change if different
+    origin: 'http://localhost:3000', // Allow only your frontend URL
     optionsSuccessStatus: 200, // For legacy browser support
     methods: "GET, POST, PUT, DELETE",
     allowedHeaders: ["Content-Type", "Authorization"]
