@@ -130,4 +130,17 @@ WhatsApp Number Checker is a web-based application designed to streamline the pr
 * WhatsApp Integration: Uses Socket.IO to handle real-time WhatsApp QR code generation and session management.
 * Real-time Upload Feedback: Provides live feedback on the status of file uploads.
 
+## Known Issues and Workarounds
+
+As with any software application, there may be unresolved issues that users may encounter during usage. Below are some known issues within the WhatsApp Number Checker application and recommended actions to mitigate these problems:
+
+1. **Delayed QR Code Generation**:
+   - **Issue**: The QR code for WhatsApp authentication can take about 10-15 seconds to load sometimes.
+   - **Impact**: Users may experience a delay when attempting to log in using WhatsApp.
+   - **Workaround**: Please allow up to 15 seconds for the QR code to appear. If it takes longer, refresh the page and try again.
+
+2. **Session Timeout Handling**:
+   - **Issue**: If the user page is left idle for an extended period, subsequent file upload attempts may fail.
+   - **Impact**: Users need to re-authenticate to restore session activity.
+   - **Workaround**: If your upload does not process after being idle, please log out and then log back in to reset your session.
 
