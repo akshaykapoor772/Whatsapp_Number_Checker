@@ -11,7 +11,7 @@ function AdminPage({ handleAdminLogout }) {
     const [qrSrc, setQrSrc] = useState('');
     const [message, setMessage] = useState('Please scan the QR code to authenticate.');
     const [loading, setLoading] = useState(true);
-    const [showAnalytics, setShowAnalytics] = useState(false);  // New state to toggle visibility
+    const [showAnalytics, setShowAnalytics] = useState(false);  
 
     useEffect(() => {
         socket.on('qr', (data) => {

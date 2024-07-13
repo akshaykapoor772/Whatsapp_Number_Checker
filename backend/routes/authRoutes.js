@@ -5,6 +5,7 @@ const Admin = require('../models/Admin');
 const router = express.Router();
 const UserAuth = require('../models/UserAuth');
 
+//Admin registration
 router.post('/register', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -16,6 +17,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
+//Admin login
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   try {

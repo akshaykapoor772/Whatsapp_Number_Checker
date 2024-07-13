@@ -51,21 +51,6 @@ function App() {
                             <ListItemIcon><MailIcon /></ListItemIcon>
                             <ListItemText primary="Admin" />
                         </ListItem>
-                        {/* Logout Buttons */}
-                        {/*
-                        {userToken && (
-                            <ListItem button key="UserLogout" onClick={handleUserLogout}>
-                                <ListItemIcon><MailIcon /></ListItemIcon>
-                                <ListItemText primary="User Logout" />
-                            </ListItem>
-                        )}
-                        {adminToken && (
-                            <ListItem button key="AdminLogout" onClick={handleAdminLogout}>
-                                <ListItemIcon><MailIcon /></ListItemIcon>
-                                <ListItemText primary="Admin Logout" />
-                            </ListItem>
-                        )}
-                          */}
                     </List>
                 </Drawer>
                 <div style={{ paddingLeft: 250, paddingRight: 50 }}>

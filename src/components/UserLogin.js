@@ -8,7 +8,7 @@ function UserLogin({ setToken }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const response = await fetch('http://localhost:5500/auth/user/login', { // Make sure this endpoint is correct
+        const response = await fetch('http://localhost:5500/auth/user/login', { 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -18,7 +18,7 @@ function UserLogin({ setToken }) {
         const data = await response.json();
         if (response.ok) {
             setToken(data.token);
-            localStorage.setItem('userToken', data.token); // Use a different key to distinguish from adminToken
+            localStorage.setItem('userToken', data.token); 
         } else {
             console.error(data.message);
             alert(data.message);
