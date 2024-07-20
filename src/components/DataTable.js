@@ -5,7 +5,7 @@ const DataTable = ({ data }) => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(15);
     const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('is_valid');
+    const [orderBy, setOrderBy] = useState('status_reason');
 
     const handleRequestSort = (event, property) => {
         const isAsc = orderBy === property && order === 'asc';
@@ -30,6 +30,8 @@ const DataTable = ({ data }) => {
     };
 
     const descendingComparator = (a, b, orderBy) => {
+        if (!b || b[orderBy] === undefined) return 1;
+        if (!a || a[orderBy] === undefined) return -1;
         if (b[orderBy] < a[orderBy]) {
             return -1;
         }
@@ -61,9 +63,9 @@ const DataTable = ({ data }) => {
                             <TableCell align="right">Number</TableCell>
                             <TableCell align="right">
                                 <TableSortLabel
-                                    active={orderBy === 'is_valid'}
-                                    direction={orderBy === 'is_valid' ? order : 'asc'}
-                                    onClick={(event) => handleRequestSort(event, 'is_valid')}
+                                    active={orderBy === 'status_reason'}
+                                    direction={orderBy === 'status_reason' ? order : 'asc'}
+                                    onClick={(event) => handleRequestSort(event, 'status_reason')}
                                 >
                                     Status
                                 </TableSortLabel>
@@ -78,8 +80,8 @@ const DataTable = ({ data }) => {
                                 </TableCell>
                                 <TableCell align="right">{row.email}</TableCell>
                                 <TableCell align="right">{row.mobile_number}</TableCell>
-                                <TableCell align="right" style={{ color: row.is_valid ? 'green' : 'red' }}>
-                                    {row.is_valid ? "Valid" : "Invalid"}
+                                <TableCell align="right" style={{ color: getStatusColor(row.status_reason) }}>
+                                    {row.status_reason}
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -97,6 +99,17 @@ const DataTable = ({ data }) => {
             />
         </Paper>
     );
+}
+
+function getStatusColor(status) {
+    switch (status) {
+        case 'Valid':
+            return 'green';
+        case 'Not authenticated':
+            return 'orange';
+        default:
+            return 'red';
+    }
 }
 
 export default DataTable;
