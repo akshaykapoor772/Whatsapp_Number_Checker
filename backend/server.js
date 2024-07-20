@@ -13,7 +13,7 @@ const { protect } = require('./middleware/authMiddleware');
 const http = require('http');
 const socketIo = require('socket.io');
 const pLimit = require('p-limit');
-const limit = pLimit(30); // Limit of concurrent operations within a batch of numbers
+const limit = pLimit(10); // Limit of concurrent operations within a batch of numbers
 const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const UploadEvent = require('./models/UploadEvent');
@@ -152,7 +152,7 @@ const checkWhatsAppContact = async (phoneNumber) => {
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Batch size and delay configuration
-const BATCH_SIZE = 30; // Number of numbers to process at once
+const BATCH_SIZE = 20; // Number of numbers to process at once
 const DELAY_BETWEEN_BATCHES = 1000; // Delay in milliseconds
 
 const processBatch = async (batch) => {
