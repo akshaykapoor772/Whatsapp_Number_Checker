@@ -12,6 +12,8 @@ const authRoutes = require('./routes/authRoutes');
 const { protect } = require('./middleware/authMiddleware');
 const http = require('http');
 const socketIo = require('socket.io');
+const pLimit = require('p-limit');
+const limit = pLimit(30); // Limit of concurrent operations within a batch of numbers
 const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const UploadEvent = require('./models/UploadEvent');
@@ -23,6 +25,16 @@ const io = socketIo(server, {
         origin: "http://localhost:3000",  // Adjust this to match your front-end URL in production
         methods: ["GET", "POST"]
     }
+});
+
+const activeSockets = new Map();
+io.on('connection', socket => {
+    console.log(`Client connected: ${socket.id}`);
+    activeSockets.set(socket.id, socket);
+    socket.on('disconnect', () => {
+        activeSockets.delete(socket.id);
+        console.log(`Client disconnected: ${socket.id}`);
+    });
 });
 
 // Setup WhatsApp client and QR code event
@@ -37,6 +49,7 @@ const whatsappClient = new Client({
   });
 
 let isInitialized = false;
+let isAuthenticated = false;
 if (!isInitialized) {
     whatsappClient.initialize()
     .then(() => console.log('WhatsApp client initialized successfully'))
@@ -61,6 +74,7 @@ whatsappClient.on('qr', (qr) => {
 
 whatsappClient.on('ready', () => {
     console.log('WhatsApp client is ready and authenticated!');
+    isAuthenticated = true;
     io.emit('authenticated', { message: "You are now logged in to WhatsApp and ready to use services" });
 });
 
@@ -81,15 +95,11 @@ whatsappClient.on('disconnected', (reason) => {
     console.log('WhatsApp client disconnected!', reason);
     io.emit('qr-request', { message: "Please scan QR code again to reconnect." });
     isInitialized = false;  // Reset initialization flag
+    isAuthenticated = false;
 });
 
 whatsappClient.on('error', (error) => {
     console.error('Error in WhatsApp client:', error);
-});
-
-io.on('connection', socket => {
-    console.log('Client connected to the socket');
-    // Additional socket events can be handled here
 });
 
 // Additional routes and logic
@@ -118,97 +128,135 @@ app.get('/auth/login', protect, (req, res) => {
     res.status(200).json({ message: 'You are authenticated', user: req.user });
   });
 
-// Mock function to check if a phone number is a valid WhatsApp number
-const isValidWhatsAppNumber = (phoneNumber) => {
-    // Example mock check: valid if exactly 10 digits
-    return phoneNumber.length === 10;
+const checkWhatsAppContact = async (phoneNumber) => {
+    if (!phoneNumber || phoneNumber.trim() === '') {
+        return { is_valid: false, reason: "Invalid phone number" }; // Immediately return false if the phone number is invalid
+    }
+    if (!isAuthenticated) {
+        return { is_valid: false, reason: "Not authenticated" };
+    }
+    try {
+        // Construct the full contact ID (append "@c.us" which is common for WhatsApp IDs)
+        const contactId = phoneNumber + '@c.us';
+        
+        // Fetch the contact from WhatsApp
+        const isRegistered = await whatsappClient.isRegisteredUser(contactId);
+        
+        // Return whether the contact is registered on WhatsApp
+        return { is_valid: isRegistered, reason: isRegistered ? "Valid" : "Invalid" };
+    } catch (error) {
+        return { is_valid: false, reason: "Error checking status" };
+    }
 };
 
-app.post('/upload', protect, upload.array('files'), (req, res) => {
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Batch size and delay configuration
+const BATCH_SIZE = 30; // Number of numbers to process at once
+const DELAY_BETWEEN_BATCHES = 1000; // Delay in milliseconds
+
+const processBatch = async (batch) => {
+    const tasks = batch.map(contact => {
+        const cleanPhoneNumber = contact['Mobile Number'] ? String(contact['Mobile Number']).replace(/\D/g, '') : '';
+        if (!cleanPhoneNumber) {
+            console.log(`Skipping entry due to missing mobile number: ${JSON.stringify(contact)}`);
+            return null;
+        }
+        return limit(() => checkWhatsAppContact(cleanPhoneNumber).then(result => ({
+            mobile_number: cleanPhoneNumber,
+            name: contact.Name || '',
+            email: contact['Email Address'] || '',
+            is_valid: result.is_valid,
+            status_reason: result.reason,
+            checked_at: new Date()
+        })));
+    });
+    return await Promise.all(tasks.filter(task => task !== null));
+};
+
+const processChunk = async (data, socket) => {
+    let allResults = [];
+    let processedCount = 0;
+    for (let i = 0; i < data.length; i += BATCH_SIZE) {
+        const batch = data.slice(i, i + BATCH_SIZE);
+        const batchResults = await processBatch(batch);
+        allResults = allResults.concat(batchResults);
+        await delay(DELAY_BETWEEN_BATCHES); // Delay between batches to manage rate limits
+        processedCount += batchResults.length;
+        const progress = Math.round((processedCount / data.length) * 100);
+        socket.emit('progress', progress);
+    }
+    console.log(`Inserting ${allResults.length} entries to the database.`);
+    await UploadData.insertMany(allResults);
+    return allResults;
+};
+
+app.post('/upload', protect, upload.array('files'), async (req, res) => {
+    const socketId = req.body.socketId; // Ensure you're passing this from the client
+    console.log("socket id is:", socketId)
+    const socket = activeSockets.get(socketId);
+    if (!socket) {
+        console.log("Socket not found.");
+        return res.status(404).json({ error: "Socket not found" });
+    }
+
     if (!req.files || req.files.length === 0) {
+        console.log("No files received for upload.");
         return res.status(400).json({ error: 'No files uploaded.' });
     }
-    let allResults = [];
-    let filesProcessed = 0;
-
-    const handleChunkComplete = () => {
-        filesProcessed += 1;
-        if (filesProcessed === req.files.length) {
-            const fileNames = req.files.map(file => file.originalname);
-            const fileSizes = req.files.map(file => file.size);
-            UploadEvent.create({
-                user_id: req.user._id,
-                user_email: req.user.email,
-                file_names: fileNames,
-                file_sizes: fileSizes,
-                valid_numbers: allResults.filter(user => user.is_valid).length,
-                invalid_numbers: allResults.filter(user => !user.is_valid).length,
-                total_numbers: allResults.length
-            }).then(() => {
-                res.json({ message: "Data processed and stored successfully!", data: allResults });
-            }).catch(err => {
-                console.error("Error saving event data:", err);
-                res.status(500).json({ error: 'Error saving event data to the database.' });
-            });
-        }
-    };
-
-    req.files.forEach(file => {
-        const fileType = file.originalname.split('.').pop().toLowerCase();
-        try {
+    try {
+        const results = await Promise.all(req.files.map(async file => {
+            console.log(`Processing file: ${file.originalname}`);
+            const fileType = file.originalname.split('.').pop().toLowerCase();
             if (fileType === 'csv') {
-                Papa.parse(file.buffer.toString(), {
-                    header: true,
-                    skipEmptyLines: true,
-                    transformHeader: header => header.trim(),
-                    chunk: function(results) {
-                        processChunk(results.data);
-                    },
-                    complete: handleChunkComplete,
-                    error: function(err) {
-                        console.error("Error parsing CSV:", err);
-                        res.status(500).json({ error: 'Error parsing CSV data.' });
-                    }
+                return new Promise((resolve, reject) => {
+                    Papa.parse(file.buffer.toString(), {
+                        header: true,
+                        skipEmptyLines: true,
+                        transformHeader: header => header.trim(),
+                        complete: async (results) => {
+                            try {
+                                const processedResults = await processChunk(results.data, socket);
+                                console.log(`Finished processing CSV file: ${file.originalname}`);
+                                resolve(processedResults);
+                            } catch (err) {
+                                console.log(`Error processing CSV file: ${file.originalname}`, err);
+                                reject(err);
+                            }
+                        }
+                    });
                 });
             } else if (fileType === 'xlsx') {
                 const workbook = xlsx.read(file.buffer, { type: 'buffer' });
                 const sheetName = workbook.SheetNames[0];
                 const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
-                processChunk(data);
-                handleChunkComplete();
+                return await processChunk(data, socket);
             } else {
                 throw new Error('Unsupported file type');
             }
-        } catch (err) {
-            console.error('Error processing file:', err);
-            res.status(500).json({ error: 'Error processing file. ' + err.message });
-        }
-    });
+        }));
 
-    function processChunk(data) {
-        const users = data.map(contact => {
-            const cleanPhoneNumber = contact['Mobile Number'] ? String(contact['Mobile Number']).replace(/\D/g, '') : '';
-            if (!cleanPhoneNumber || !contact.Name || !contact['Email Address']) {
-                return null;
-            }
-            return {
-                mobile_number: cleanPhoneNumber,
-                name: contact.Name,
-                email: contact['Email Address'],
-                is_valid: isValidWhatsAppNumber(cleanPhoneNumber),
-                checked_at: new Date()
-            };
-        }).filter(user => user !== null);
-
-        allResults = allResults.concat(users);
-        UploadData.insertMany(users)
-            .then(() => console.log("Chunk processed and saved successfully."))
-            .catch(err => {
-                console.error("Error saving user data:", err);
-                res.status(500).json({ error: 'Error saving user data to the database.' });
-            });
+        const allResults = results.flat();
+        const fileNames = req.files.map(file => file.originalname);
+        const fileSizes = req.files.map(file => file.size);
+        console.log("Creating upload event in the database.");
+        await UploadEvent.create({
+            user_id: req.user._id,
+            user_email: req.user.email,
+            file_names: fileNames,
+            file_sizes: fileSizes,
+            valid_numbers: allResults.filter(user => user.is_valid).length,
+            invalid_numbers: allResults.filter(user => !user.is_valid).length,
+            total_numbers: allResults.length
+        });
+        console.log("Data processed and stored successfully.");
+        res.json({ message: "Data processed and stored successfully!", data: allResults });
+    } catch (err) {
+        console.error("Error processing files:", err);
+        res.status(500).json({ error: 'Error processing files.' });
     }
 });
+
 
 app.get('/api/admin/upload-stats', protect, async (req, res) => {
     console.log("Fetching upload stats");
